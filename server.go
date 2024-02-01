@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net"
+	"strings"
 )
 
 const (
@@ -34,8 +34,26 @@ func main() {
 			log.Printf("Error reading message: %s", err.Error())
 			return
 		}
-		fmt.Println(value)
-		conn.Write([]byte(okMsg))
+
+		if value.typ != "array" {
+			log.Printf("Invalid type: %s. Expected array", value.typ)
+		}
+		if len(value.array) == 0 {
+			log.Printf("Invalid array length: %d. Expected > 0", len(value.array))
+		}
+
+		cmd := strings.ToUpper(value.array[0].bulk)
+		args := value.array[1:]
+		writer := NewWriter(conn)
+
+		handler, ok := Handlers[cmd]
+		if !ok {
+			log.Printf("Unknown command: %s", cmd)
+			writer.Write(RedisMessage{typ: "string", str: "Unknown command"})
+			continue
+		}
+		results := handler(args)
+		writer.Write(results)
 	}
 
 }

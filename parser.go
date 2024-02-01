@@ -140,3 +140,87 @@ func (r *Resp) readBulkString() (RedisMessage, error) {
 
 	return v, nil
 }
+
+func (m RedisMessage) MarshalMessage() []byte {
+	switch m.typ {
+	case "array":
+		return m.marshallArray()
+	case "bulk":
+		return m.marshallBulk()
+	case "string":
+		return m.marshallString()
+	case "null":
+		return m.marshallNull()
+	case "error":
+		return m.marshallError()
+	default:
+		return []byte{}
+	}
+}
+
+// The method marshalString() creates a byte array and appends the String, followed by the CRLF (Carriage Return Line Feed).
+// It's essential to include the CRLF,
+// as the absence of it could lead to compatibility issues, rendering the RESP client unable to comprehend the response.
+func (m RedisMessage) marshallString() []byte {
+	var bytes []byte
+	bytes = append(bytes, SimpleString)
+	bytes = append(bytes, m.str...)
+	bytes = append(bytes, '\r', '\n')
+	return bytes
+}
+
+func (m RedisMessage) marshallBulk() []byte {
+	var bytes []byte
+	bytes = append(bytes, BulkString)
+	bytes = append(bytes, strconv.Itoa(len(m.bulk))...)
+	bytes = append(bytes, '\r', '\n')
+	bytes = append(bytes, m.bulk...)
+	bytes = append(bytes, '\r', '\n')
+	return bytes
+}
+
+func (m RedisMessage) marshallArray() []byte {
+	length := len(m.array)
+	var bytes []byte
+
+	bytes = append(bytes, Array)
+	bytes = append(bytes, strconv.Itoa(length)...)
+	bytes = append(bytes, '\r', '\n')
+	for i := 0; i < length; i++ {
+		bytes = append(bytes, m.array[i].MarshalMessage()...)
+	}
+	return bytes
+
+}
+
+func (m RedisMessage) marshallError() []byte {
+	var bytes []byte
+	bytes = append(bytes, Error)
+	bytes = append(bytes, m.str...)
+	bytes = append(bytes, '\r', '\n')
+
+	return bytes
+}
+
+func (m RedisMessage) marshallNull() []byte {
+	return []byte("$-1\r\n")
+}
+
+type Writer struct {
+	writer io.Writer
+}
+
+func NewWriter(w io.Writer) *Writer {
+	return &Writer{
+		writer: w,
+	}
+}
+
+func (w *Writer) Write(m RedisMessage) error {
+	var bytes = m.MarshalMessage()
+	_, err := w.writer.Write(bytes)
+	if err != nil {
+		return err
+	}
+	return nil
+}

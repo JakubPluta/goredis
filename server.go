@@ -19,6 +19,24 @@ func main() {
 		return
 
 	}
+	rfs, err := NewRedisFileStore("server.db")
+	if err != nil {
+		log.Printf("Error starting server: %s", err.Error())
+		return
+	}
+	defer rfs.Close()
+
+	rfs.Read(func(msg RedisMessage) {
+		cmd := strings.ToUpper(msg.array[0].bulk)
+		args := msg.array[1:]
+
+		handler, ok := Handlers[cmd]
+		if !ok {
+			log.Printf("Unknown command: %s", cmd)
+			return
+		}
+		handler(args)
+	})
 
 	conn, err := listener.Accept()
 	if err != nil {
@@ -52,6 +70,11 @@ func main() {
 			writer.Write(RedisMessage{typ: "string", str: "Unknown command"})
 			continue
 		}
+
+		if cmd == "SET" || cmd == "HSET" {
+			rfs.Write(value)
+		}
+
 		results := handler(args)
 		writer.Write(results)
 	}
